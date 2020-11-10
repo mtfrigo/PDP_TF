@@ -18,7 +18,7 @@ counting = False
 MESSAGE_INTERVAL = 1
 # PUBLISHERS = 329
 
-PUBLISHERS = 500
+PUBLISHERS = 100
 MESSAGE_PER_PUB = 100
 
 WARMUP_DURATION = 30
@@ -146,8 +146,8 @@ def createTimer():
 
 def main(argv):
     # --- Broker 
-    broker_ip = 'ec2-54-208-177-151.compute-1.amazonaws.com'
-    # broker_ip = 'localhost'
+    # broker_ip = 'ec2-54-208-177-151.compute-1.amazonaws.com'
+    broker_ip = 'localhost'
     broker_port = 1883
     topic = "System"
     topic_master = "master"

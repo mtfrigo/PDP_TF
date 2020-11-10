@@ -134,8 +134,6 @@ def main(argv):
     time.sleep(WARMINGUP_DURATION)
 
     print("Starting...")
-
-
     counting = True
 
     with open("sv_p"+str(PUBLISHERS)+"t"+str(THROUGHPUT)+".csv", 'w', newline='') as csvfile:
