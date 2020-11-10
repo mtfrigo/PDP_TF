@@ -13,15 +13,21 @@ stop = False
 start = False
 counting = False
 
+# MESSAGE_INTERVAL = 0.1
+# MESSAGE_INTERVAL = 0.5
 MESSAGE_INTERVAL = 1
-PUBLISHERS = 300
+# PUBLISHERS = 329
+
+PUBLISHERS = 500
 MESSAGE_PER_PUB = 100
 
-WARMUP_DURATION = 10
+WARMUP_DURATION = 30
 
-BENCHMARK_DURATION = 60
-ITERATION_DURATION = 30
+BENCHMARK_DURATION = 180
+ITERATION_DURATION = 10
+
 ITERATIONS = int(BENCHMARK_DURATION / ITERATION_DURATION ) + 1
+THROUGHPUT = int((1 / MESSAGE_INTERVAL ) * PUBLISHERS)
 
 # ITERATIONS = 6
 
@@ -50,10 +56,12 @@ class Client(object):
         global counting
 
         # --- Parse message to JSON
-        parsed_json = json.loads(message.payload.decode("utf-8", "ignore"))
+        # parsed_json = json.loads(message.payload.decode("utf-8", "ignore"))
+        decoded_message = message.payload.decode("utf-8", "ignore")
 
         if counting == True:
-            latency = time.time() -  float(parsed_json["sent"])
+            # latency = time.time() -  float(parsed_json["sent"])
+            latency = time.time() -  float(decoded_message)
             latency_sum =  latency_sum + latency
         
 
@@ -83,13 +91,17 @@ def createPubMaster(broker_ip, broker_port, topic, client_id):
     publisher.start()
 
     print("Initiliazing server...")
-    publisher.sendMessage(topic, str(PUBLISHERS))
+
+    message = '{"pubs": "'+str(PUBLISHERS)+'", "iteration_duration": "'+str(ITERATION_DURATION)+'", "warmup_duration": "'+str(WARMUP_DURATION)+'", "status": "'+str(1)+'", "throughput": "'+str(THROUGHPUT)+'"}'
+
+    publisher.sendMessage(topic, message)
 
     while stop == False:
         time.sleep(1)
 
     print("Stopping server...")
-    publisher.sendMessage(topic, str(0))
+    message = '{"pubs": "'+str(PUBLISHERS)+'", "iteration_duration": "'+str(ITERATION_DURATION)+'", "warmup_duration": "'+str(WARMUP_DURATION)+'", "status": "'+str(0)+'", "throughput": "'+str(THROUGHPUT)+'"}'
+    publisher.sendMessage(topic, message)
 
     
 
@@ -108,7 +120,7 @@ def createPub(broker_ip, broker_port, topic, client_id):
 
     while True:
         # message = '{"id": "'+client_id+'", "count": '+str(count)+', sent": '+str(datetime.now())+'}'
-        message = '{"id": "'+client_id+'", "count": '+str(count)+', "sent": "'+str(time.time())+'"}'
+        message = str(time.time())
 
         publisher.sendMessage(topic, message)
 
@@ -134,7 +146,7 @@ def createTimer():
 
 def main(argv):
     # --- Broker 
-    broker_ip = '192.168.0.39'
+    broker_ip = 'ec2-54-208-177-151.compute-1.amazonaws.com'
     # broker_ip = 'localhost'
     broker_port = 1883
     topic = "System"
@@ -174,14 +186,14 @@ def main(argv):
     print("Starting...")
     counting = True
 
-    with open("p"+str(PUBLISHERS)+".csv", 'w', newline='') as csvfile:
+    with open("cl_p"+str(PUBLISHERS)+"t"+str(THROUGHPUT)+".csv", 'w', newline='') as csvfile:
         spamwriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
 
         start_time = time.time()
 
         i = 0
         while i <= ITERATIONS:
-            print(i, latency_sum, message_counter)
+            print(i+1, latency_sum, message_counter)
             time_now = str(time.time() -  start_time)
             cpu = str(psutil.cpu_percent())
             memory = str(psutil.virtual_memory().percent)
@@ -190,7 +202,7 @@ def main(argv):
             if message_counter > 0 :
                 avg_latency = str(latency_sum/message_counter*1.0)
 
-            spamwriter.writerow([time_now, cpu, memory, avg_latency])
+            spamwriter.writerow([i+1, time_now, cpu, memory, avg_latency])
             
             i = i + 1
             time.sleep(ITERATION_DURATION)
