@@ -7,16 +7,16 @@ from threading import Thread
 import psutil
 import csv
 
-latency_sum = 0
+counting = False
+
 message_counter = 0
 stop = False
 start = False
 
-MESSAGE_INTERVAL = 1
-PUBLISHERS = 500
-MESSAGE_PER_PUB = 100
-BENCHMARK_DURATION = 330
-ITERATIONS = 10
+PUBLISHERS = 0
+ITERATION_DURATION = 0
+WARMINGUP_DURATION = 0
+THROUGHPUT = 0
 
 class Client(object):
     hostname = '192.168.0.39'
@@ -40,25 +40,30 @@ class Client(object):
         # print("[" + datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] + "]: " + "ClientID: " + self.clientId + "; Connected to "+str(self.hostname)+" with result code " + str(rc))
 
     def on_message(self, client, userdata, message):
+
         if self.topic == 'master':
             global start
-            print(message)
-            if message == '1':
-                start = True
-            elif message == '0':
-                start = False
-        else:
-            global latency_sum
-            global message_counter
+            global stop
 
-            # --- Parse message to JSON
+
             parsed_json = json.loads(message.payload.decode("utf-8", "ignore"))
+            print(parsed_json)
 
-            latency = time.time() -  float(parsed_json["sent"])
-
-            # print(parsed_json["id"])
-            # print(parsed_json["count"])
-            latency_sum += (latency)
+            if parsed_json["status"] == "0":
+                stop = True
+            else:
+                global PUBLISHERS, WARMINGUP_DURATION, ITERATION_DURATION, THROUGHPUT
+                PUBLISHERS = int(parsed_json['pubs'])
+                WARMINGUP_DURATION = int(parsed_json['warmup_duration'])
+                THROUGHPUT = int(parsed_json['throughput'])
+                ITERATION_DURATION = int(parsed_json['iteration_duration'])
+                start = True
+        else:
+            global message_counter
+            global counting
+            
+            if counting == True:
+                message_counter = message_counter + 1
         
 
     # publishes message to MQTT broker
@@ -80,23 +85,6 @@ class Client(object):
         #Call loop_stop() to stop the background thread.
         self.client.loop_start()
 
-def createPub(broker_ip, broker_port, topic, client_id):
-    global message_counter
-    publisher = Client(broker_ip, broker_port, client_id, False)
-    publisher.connect()
-    publisher.start()
-
-    count = 1
-
-    while True:
-        # message = '{"id": "'+client_id+'", "count": '+str(count)+', sent": '+str(datetime.now())+'}'
-        message = '{"id": "'+client_id+'", "count": '+str(count)+', "sent": "'+str(time.time())+'"}'
-
-        publisher.sendMessage(topic, message)
-        message_counter = message_counter + 1
-        count = count + 1
-
-        time.sleep(MESSAGE_INTERVAL)
 
 def createSub(broker_ip, broker_port, topic, client_id):
     subscriber = Client(broker_ip, broker_port, client_id, False)
@@ -105,20 +93,25 @@ def createSub(broker_ip, broker_port, topic, client_id):
     subscriber.start()
 
     while True:
-        time.sleep(1)
-
-def createTimer():
-    global stop
-    time.sleep(BENCHMARK_DURATION)
-    stop = True
+        time.sleep(0.1)
 
 def main(argv):
+    global counting
+    global message_counter
     # --- Broker 
     broker_ip = 'localhost'
     # broker_ip = 'localhost'
     broker_port = 1883
     topic = "System"
-    master_topic = "System"
+    master_topic = "master"
+
+    print("Setting up..")
+
+    client_id = 'sub_master'
+    master_thread = Thread(target=createSub, args=(broker_ip, broker_port, master_topic, client_id))
+    master_thread.name = 'MasterThread'
+    master_thread.daemon = True
+    master_thread.start()
 
     # --- Benchmark
     client_id = 'sub0'
@@ -130,29 +123,40 @@ def main(argv):
     # --- Time to set up all clients
     time.sleep(5)
 
+    print("Waiting for command to start..")
+
     while start == False:
         time.sleep(0.1)
 
-    with open("p"+str(PUBLISHERS)+".csv", 'w', newline='') as csvfile:
+    print("Starting server...")
+
+    print("Warming up... ("+str(WARMINGUP_DURATION)+"s)")
+    time.sleep(WARMINGUP_DURATION)
+
+    print("Starting...")
+
+
+    counting = True
+
+    with open("sv_p"+str(PUBLISHERS)+"t"+str(THROUGHPUT)+".csv", 'w', newline='') as csvfile:
         spamwriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-
-        # --- Initiate global timer
-        timer_thread = Thread(target=createTimer, args=())
-        timer_thread.name = 'TimerThread'
-        timer_thread.daemon = True
-        timer_thread.start()
-
         start_time = time.time()
 
-        i = 0
+        i = 1
         while stop == False:
-            if latency_sum > 0 and message_counter > 0:
-                spamwriter.writerow([str(time.time() -  start_time), str(psutil.cpu_percent()), psutil.virtual_memory().percent, str(latency_sum/message_counter*1.0)])
-            
-            i = i + 1
-            print(i, ITERATIONS)
-            time.sleep(30)
+            print(i, message_counter)
 
+            time_now = str(time.time() -  start_time)
+            cpu = str(psutil.cpu_percent())
+            memory = str(psutil.virtual_memory().percent)
+
+            spamwriter.writerow([i, time_now, cpu, memory])
+            i = i + 1
+            time.sleep(ITERATION_DURATION)
+
+    print("Stopping server...")
+    print("Total of messages received: " + str(message_counter))
+    
         
 if __name__ == "__main__":
    main(sys.argv[1:])
