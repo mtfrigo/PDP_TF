@@ -118,8 +118,8 @@ def main(argv):
     global counting
 
     # --- Broker 
-    # broker_ip = 'ec2-54-208-177-151.compute-1.amazonaws.com'
-    broker_ip = '192.168.0.39'
+    broker_ip = 'ec2-54-208-177-151.compute-1.amazonaws.com'
+    # broker_ip = '192.168.0.39'
     # broker_ip = 'localhost'
     broker_queue = 'test'
 
